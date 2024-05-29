@@ -49,7 +49,7 @@
         "group": "f0a244d28136cdaf",
         "order": 0,
         "width": "6",
-        "height": "5",
+        "height": "4",
         "gtype": "gage",
         "title": "CO Consentration",
         "label": "ppm",
@@ -77,7 +77,7 @@
         "group": "f0a244d28136cdaf",
         "order": 1,
         "width": "6",
-        "height": "5",
+        "height": "4",
         "gtype": "gage",
         "title": "NOx Consentration",
         "label": "ppm",
@@ -331,7 +331,7 @@
         "name": "",
         "group": "cf8c7edb9fe7399d",
         "order": 5,
-        "width": "6",
+        "width": "3",
         "height": "1",
         "passthru": false,
         "label": "Reset",
@@ -406,55 +406,6 @@
             [
                 "63898fda441bbff4"
             ]
-        ]
-    },
-    {
-        "id": "6a6d90ead9937a43",
-        "type": "ui_button",
-        "z": "73fbb4589eaafdb7",
-        "name": "Print",
-        "group": "cf8c7edb9fe7399d",
-        "order": 8,
-        "width": "3",
-        "height": "1",
-        "passthru": false,
-        "label": "Print PDF",
-        "tooltip": "",
-        "color": "",
-        "bgcolor": "",
-        "className": "",
-        "icon": "",
-        "payload": "",
-        "payloadType": "str",
-        "topic": "",
-        "topicType": "str",
-        "x": 210,
-        "y": 460,
-        "wires": [
-            [
-                "06f5d6910b85007a"
-            ]
-        ]
-    },
-    {
-        "id": "06f5d6910b85007a",
-        "type": "ui_template",
-        "z": "73fbb4589eaafdb7",
-        "group": "f0a244d28136cdaf",
-        "name": "",
-        "order": 6,
-        "width": "0",
-        "height": "0",
-        "format": "<script>\n    (function(scope) {\n    scope.$watch('msg', function(msg) {\n        if (msg) {\n            // Menunggu sebentar untuk memastikan halaman sudah siap sebelum mencetak\n            setTimeout(function() {\n                window.print();\n            }, 500);\n        }\n    });\n})(scope);\n</script>",
-        "storeOutMessages": true,
-        "fwdInMessages": true,
-        "resendOnRefresh": true,
-        "templateScope": "local",
-        "className": "",
-        "x": 460,
-        "y": 580,
-        "wires": [
-            []
         ]
     },
     {
