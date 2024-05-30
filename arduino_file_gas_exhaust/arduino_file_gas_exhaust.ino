@@ -1,38 +1,49 @@
+// Call Library
 #include <Arduino.h>
 #include <Wire.h>              // Library komunikasi I2C 
 #include <LiquidCrystal_I2C.h> // Library modul I2C LCD
 #include <MQUnifiedsensor.h>   // Library sensor MQ series
-#include <MQ7.h>               // Library sensor MQ7
 #include <WiFi.h>              // Library WiFi ESP32
 #include <PubSubClient.h>      // Library untuk koneksi mqtt 
 #include <WiFiManager.h>       // Library WiFiManager
 
+// Sensor Configuration
 #define Board              "ESP-32"
 #define Voltage_Resolution 3.3      // Resolusi tegangan untuk MQ-135
-#define type               "MQ-135" // Jenis sensor MQ-135
 #define ADC_Bit_Resolution 12       // Jumlah ADC bit ESP32
-#define RatioMQ135CleanAir 3.6      // Rasio untuk udara bersih
+#define RatioMQ135CleanAir 3.6      // Rasio untuk udara bersih MQ135
+#define RatioMQ7CleanAir   27.0     // Rasio untuk udara bersih MQ7
+
+// Pin Configuration
 #define PIN_MQ135          34       // MQ135 Analog Input Pin
 #define PIN_MQ7            35       // MQ7 Analog Input Pin
 #define PIN_BUZZER         5        // Buzzer Pin
-#define SENSOR_INTERVAL    2000     // Interval 2 detik untuk pembacaan sensor dan pengiriman ke broker
 
+// WiFi and MQTT Configuration
 const char* ssid = "ARNUR";
 const char* password = "takonmama";
 const char* mqtt_server = "broker.hivemq.com";              // Broker mqtt server
 const int   mqtt_tcp_port = 1883;                         // TCP port untuk mqt server
-const char* co_consentration_topic = "ta-anggi-ump20/co";   // Topic mqtt untuk gas CO
-const char* nox_consentration_topic = "ta-anggi-ump20/nox"; // Topic mqtt untuk gas NOx
+const char* co_concentration_topic = "ta-anggi-ump20/co";   // Topic mqtt untuk gas CO
+const char* nox_concentration_topic = "ta-anggi-ump20/nox"; // Topic mqtt untuk gas NOx
 
+// LCD Configuration
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 20, 4); // default address 0x27 tipe LCD 16x2 (16,2)
-MQUnifiedsensor MQ135(Board, Voltage_Resolution, ADC_Bit_Resolution, PIN_MQ135, type);
-MQ7 mq7(PIN_MQ7, 5.0);
+
+// MQ Sensor Objects
+MQUnifiedsensor MQ135(Board, Voltage_Resolution, ADC_Bit_Resolution, PIN_MQ135, "MQ-135");
+MQUnifiedsensor MQ7(Board, Voltage_Resolution, ADC_Bit_Resolution, PIN_MQ7, "MQ-7");
+
+// WiFi and MQTT Client
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Pendefinisian variabel
+// Pendefinisian Timing Variables
+#define SENSOR_INTERVAL    2000     // Interval 2 detik untuk pembacaan sensor dan pengiriman ke broker
 long lastMsg, lastReconnectAttempt, lastSensorRead = 0;
-float nox_consentration, co_consentration;
+
+// Pendefinisian variabel lainnya
+float nox_concentration, co_concentration;
 String status;
 
 void setup() {
@@ -54,13 +65,12 @@ void setup() {
   delay(5000);
 
   setup_wifi(); // inisialisasi koneksi wifi
-
   client.setServer(mqtt_server, mqtt_tcp_port); // inisialisasi koneksi ke mqtt server
 
+  // Initialize MQ-135 for NOx
   MQ135.setRegressionMethod(1); 
   MQ135.setA(110.47); // Constants for NOx
   MQ135.setB(-4.862); // Constants for NOx
-
   MQ135.init();
 
   // Calibrate the sensor (assume it is in clean air at startup)
@@ -79,7 +89,21 @@ void setup() {
     delay(100);
   }
   MQ135.setR0(calcR0 / 10);
-  Serial.println(" done!.");
+  Serial.println("MQ-135 Calibration done!");
+
+  // Initialize MQ-7 for CO
+  MQ7.setRegressionMethod(1); 
+  MQ7.setA(99.042); // Constants for CO
+  MQ7.setB(-1.518); // Constants for CO
+  MQ7.init();
+  float calcR0_MQ7 = 0;
+  for (int i = 1; i <= 10; i++) {
+    MQ7.update();
+    calcR0_MQ7 += MQ7.calibrate(RatioMQ7CleanAir);
+    Serial.print(".");
+  }
+  MQ7.setR0(calcR0_MQ7 / 10);
+  Serial.println("MQ-7 Calibration done!");
 
   lcd.clear();
   lcd.setCursor(0, 0); 
@@ -95,7 +119,7 @@ void loop() {
   long now = millis();
 
   // Periksa apakah kadar gas buang diatas 50 PPM
-  if (co_consentration >= 50.00 || nox_consentration >= 50.00){
+  if (co_concentration >= 50.00 || nox_concentration >= 50.00){
     digitalWrite(PIN_BUZZER, HIGH);
     status = "Warning";
   } else {
@@ -107,14 +131,16 @@ void loop() {
   if (now - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = now;
     MQ135.update();
-    nox_consentration = MQ135.readSensor();
-    co_consentration = mq7.getPPM();
+    MQ7.update();
+
+    float nox_concentration = MQ135.readSensor();
+    float co_concentration = MQ7.readSensor();
 
     Serial.print("CO : ");
-    Serial.print(co_consentration);
+    Serial.print(co_concentration);
     Serial.println(" PPM");
     Serial.print("NOx Concentration: ");
-    Serial.print(nox_consentration);
+    Serial.print(nox_concentration);
     Serial.println(" PPM");
 
     lcd.clear();
@@ -123,12 +149,12 @@ void loop() {
     lcd.setCursor(0, 1); 
     lcd.print(" CO    : ");
     lcd.setCursor(9, 1); 
-    lcd.print(co_consentration);
+    lcd.print(co_concentration);
     lcd.print(" ppm");
     lcd.setCursor(0, 2); 
     lcd.print(" NOx   : ");
     lcd.setCursor(9, 2); 
-    lcd.print(nox_consentration);
+    lcd.print(nox_concentration);
     lcd.print(" ppm");
     lcd.setCursor(0, 3); 
     lcd.print("Status : ");
@@ -136,8 +162,8 @@ void loop() {
 
     // Publikasikan ke MQTT
     if (client.connected()) {
-      client.publish(co_consentration_topic, String(co_consentration).c_str());
-      client.publish(nox_consentration_topic, String(nox_consentration).c_str());
+      client.publish(co_concentration_topic, String(co_concentration).c_str());
+      client.publish(nox_concentration_topic, String(nox_concentration).c_str());
     }
   }
 
