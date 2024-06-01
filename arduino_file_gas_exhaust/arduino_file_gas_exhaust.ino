@@ -19,7 +19,9 @@
 #define PIN_MQ7            35       // MQ7 Analog Input Pin
 #define PIN_BUZZER         5        // Buzzer Pin
 
-// MQTT Configuration
+// WiFi and MQTT Configuration
+const char* ssid = "ARNUR";
+const char* password = "takonmama";
 const char* mqtt_server = "broker.hivemq.com";              // Broker mqtt server
 const int   mqtt_tcp_port = 1883;                         // TCP port untuk mqt server
 const char* co_concentration_topic = "ta-anggi-ump20/co";   // Topic mqtt untuk gas CO
@@ -35,7 +37,6 @@ MQUnifiedsensor MQ7(Board, Voltage_Resolution, ADC_Bit_Resolution, PIN_MQ7, "MQ-
 // WiFi and MQTT Client
 WiFiClient espClient;
 PubSubClient client(espClient);
-WiFiManager wm;
 
 // Pendefinisian Timing Variables
 #define SENSOR_INTERVAL    2000     // Interval 2 detik untuk pembacaan sensor dan pengiriman ke broker
@@ -44,21 +45,6 @@ long lastMsg, lastReconnectAttempt, lastSensorRead = 0;
 // Pendefinisian variabel lainnya
 float nox_concentration, co_concentration;
 String status;
-String message = "            Hubungkan ke WiFi 'Exhaust Gas Monitor' dan buka 192.168.4.1 pada browser, Atau Tunggu 1 menit untuk masuk mode Offline";
-int messageLength = message.length();
-int scrollPosition = 0;
-bool wifiConnected = false;
-unsigned long portalTimeout = 60; // Timeout portal dalam 60 detik
-byte wifiSymbol[8] = { // Definisi karakter khusus untuk simbol WiFi
-  B00100,
-  B01010,
-  B10001,
-  B00100,
-  B01010,
-  B00000,
-  B00100,
-  B00000
-};
 
 void setup() {
   Serial.begin(115200);
@@ -78,56 +64,7 @@ void setup() {
   lcd.print("NPM : 2003030039");
   delay(5000);
 
-  // inisialisasi koneksi wifi dengen wifimanager
-  wm.setConfigPortalBlocking(false);  // Inisialisasi WiFiManager tanpa blocking
-
-  // Coba untuk auto-connect ke jaringan WiFi yang pernah disimpan
-  if (!wm.autoConnect("Exhaust Gas Monitor", "1234567890")) {
-    unsigned long startTime = millis();
-    Serial.println("Hubungkan ke WiFi 'Exhaust Gas Monitor' dan buka 192.168.4.1 pada browser, Atau Tunggu 1 menit untuk memasuki mode Offline");
-    
-    wm.startConfigPortal("Exhaust Gas Monitor", "1234567890");
-    // Loop untuk menunggu hingga 60 detik atau koneksi berhasil
-    while (millis() - startTime < portalTimeout*1000) { 
-      wm.process();
-
-      // Mengatur posisi awal untuk menampilkan teks berjalan
-      lcd.setCursor(0, 3);
-
-      // Menampilkan sebagian pesan tergantung pada posisi scroll
-      for (int i = 0; i < 20; i++) {
-        if ((scrollPosition + i) < messageLength) {
-          lcd.print(message[scrollPosition + i]);
-        } else {
-          lcd.print(" ");
-        }
-      }
-
-      // Mengatur posisi scroll
-      scrollPosition++;
-      if (scrollPosition > messageLength) {
-        scrollPosition = 0;
-      }
-
-      // Menunggu sebelum menggeser teks lagi
-      delay(220);
-
-      if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("Connected to WiFi during portal!");
-        wifiConnected = true;
-        break;
-      }
-    }
-    // Jika tidak terhubung setelah 60 detik, matikan portal
-    if (WiFi.status() != WL_CONNECTED) {
-      wm.stopConfigPortal();
-      Serial.println("Config portal timeout, running offline");
-    }
-  } else {
-    Serial.println("Connected to WiFi!");
-    wifiConnected = true;
-  }
-
+  setup_wifi(); // inisialisasi koneksi wifi
   client.setServer(mqtt_server, mqtt_tcp_port); // inisialisasi koneksi ke mqtt server
 
   // Initialize MQ-135 for NOx
@@ -196,8 +133,8 @@ void loop() {
     MQ135.update();
     MQ7.update();
 
-    float nox_concentration = MQ135.readSensor();
-    float co_concentration = MQ7.readSensor();
+    nox_concentration = MQ135.readSensor();
+    co_concentration = MQ7.readSensor();
 
     Serial.print("CO : ");
     Serial.print(co_concentration);
@@ -222,7 +159,6 @@ void loop() {
     lcd.setCursor(0, 3); 
     lcd.print("Status : ");
     lcd.print(status);
-    cekWiFI();
 
     // Publikasikan ke MQTT
     if (client.connected()) {
@@ -246,20 +182,37 @@ void loop() {
   delay(100);
 }
 
-void cekWiFI() {
-  // Cek status koneksi WiFi
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected!");
-    lcd.setCursor(19, 3); 
-    lcd.print("x");
-    wifiConnected = false;
+void setup_wifi() {
+  delay(10);
+  Serial.println();
+  lcd.setCursor(0, 0); 
+  lcd.print("Connecting to ");
+  lcd.println(ssid);
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  unsigned long startAttemptTime = millis();
+  
+  // Loop untuk mencoba menghubungkan selama 15 detik (15000 milidetik)
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 15000) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("");
+    lcd.setCursor(0, 2); 
+    lcd.print("WiFi connected");
+    lcd.setCursor(0, 3); 
+    lcd.print("IP : ");
+    lcd.println(WiFi.localIP());
+    Serial.print("WiFi connected, IP address: ");
+    Serial.println(WiFi.localIP());
   } else {
-    if (wifiConnected) {
-      Serial.println("WiFi connected!");
-      lcd.setCursor(19, 3); 
-      lcd.write(byte(0));
-      wifiConnected = true;
-    }
+    Serial.println("");
+    Serial.println("Failed to connect to WiFi within 15 seconds.");
   }
 }
 
