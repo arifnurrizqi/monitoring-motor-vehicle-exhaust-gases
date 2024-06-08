@@ -23,7 +23,7 @@
 const char* ssid = "ARNUR";
 const char* password = "takonmama";
 const char* mqtt_server = "broker.hivemq.com";              // Broker mqtt server
-const int   mqtt_tcp_port = 1883;                         // TCP port untuk mqt server
+const int   mqtt_tcp_port = 1883;                           // TCP port untuk mqt server
 const char* co_concentration_topic = "ta-anggi-ump20/co";   // Topic mqtt untuk gas CO
 const char* nox_concentration_topic = "ta-anggi-ump20/nox"; // Topic mqtt untuk gas NOx
 
@@ -46,7 +46,7 @@ long lastMsg, lastReconnectAttempt, lastSensorRead = 0;
 float nox_concentration, co_concentration;
 String status;
 
-void setup() {
+void setup() { // Program yang dijalankan sekali saat ESP32 menyala
   Serial.begin(115200);
   pinMode(PIN_BUZZER, OUTPUT);
 
@@ -69,11 +69,11 @@ void setup() {
 
   // Initialize MQ-135 for NOx
   MQ135.setRegressionMethod(1); 
-  MQ135.setA(110.47); // Constants for NOx
+  MQ135.setA(110.47); // Constants for NOx yang didapat dari library
   MQ135.setB(-4.862); // Constants for NOx
   MQ135.init();
 
-  // Calibrate the sensor (assume it is in clean air at startup)
+  // Calibrasi Sensor (asumsikan itu berada di udara bersih saat startup)
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Exhaust Gas Monitor");
@@ -93,7 +93,7 @@ void setup() {
 
   // Initialize MQ-7 for CO
   MQ7.setRegressionMethod(1); 
-  MQ7.setA(99.042); // Constants for CO
+  MQ7.setA(99.042); // Constants for CO yang didapat dari library
   MQ7.setB(-1.518); // Constants for CO
   MQ7.init();
   float calcR0_MQ7 = 0;
@@ -105,6 +105,7 @@ void setup() {
   MQ7.setR0(calcR0_MQ7 / 10);
   Serial.println("MQ-7 Calibration done!");
 
+  // Menampilkan status kalibrasi sukses pada lcd
   lcd.clear();
   lcd.setCursor(0, 0); 
   lcd.print("Exhaust Gas Monitor");
@@ -115,27 +116,31 @@ void setup() {
   lcd.clear();
 }
 
-void loop() {
+void loop() { // Program yang dijalankan berulang kali setelah selesai menjalankan program pada Void Setup()
   long now = millis();
 
   // Periksa apakah kadar gas buang diatas 50 PPM
-  if (co_concentration >= 50.00 || nox_concentration >= 50.00){
+  if (co_concentration >= 50.00 || nox_concentration >= 50.00){ // jika iya buzzer akan berbunyi dan memberikan status warning
     digitalWrite(PIN_BUZZER, HIGH);
     status = "Warning";
-  } else {
+  } else { // jika tidak buzzer akan mati dan memberikan status safe
     digitalWrite(PIN_BUZZER, LOW);
     status = "Safe";
   }
 
   // Pembacaan sensor dengan interval 2 detik
   if (now - lastSensorRead >= SENSOR_INTERVAL) {
-    lastSensorRead = now;
+    lastSensorRead = now; // mengupdate nilai variabel lastSensorRead
+
+    // Update untuk sensor MQ135 dan MQ7
     MQ135.update();
     MQ7.update();
 
+    // Memperbaharui nilai Variabel
     nox_concentration = MQ135.readSensor();
     co_concentration = MQ7.readSensor();
 
+    // menampilkan nilai pembacaan gas pada serial monitor
     Serial.print("CO : ");
     Serial.print(co_concentration);
     Serial.println(" PPM");
@@ -143,6 +148,7 @@ void loop() {
     Serial.print(nox_concentration);
     Serial.println(" PPM");
 
+    // menampilkan nilai pembacaan gas pada lcd 20x4
     lcd.clear();
     lcd.setCursor(0, 0); 
     lcd.print("Exhaust Gas Monitor");
@@ -160,16 +166,17 @@ void loop() {
     lcd.print("Status : ");
     lcd.print(status);
 
-    // Publikasikan ke MQTT
+    // Publikasikan data ke MQTT server: hiveMQ
     if (client.connected()) {
       client.publish(co_concentration_topic, String(co_concentration).c_str());
       client.publish(nox_concentration_topic, String(nox_concentration).c_str());
     }
   }
 
-  if (!client.connected()) {
+  // Cek apakah esp terhubung dengan server MQTT
+  if (!client.connected()) { // jika tidak terhubung jalankan program dibawahnya
     long now = millis();
-    if (now - lastReconnectAttempt > 5000) {
+    if (now - lastReconnectAttempt > 5000) { // mencoba menghubungkan ke server setiap 5 detik sekali
       lastReconnectAttempt = now;
       if (reconnect()) {
         lastReconnectAttempt = 0;
@@ -182,7 +189,7 @@ void loop() {
   delay(100);
 }
 
-void setup_wifi() {
+void setup_wifi() { // Fungsi untuk melakukan setup koneksi WiFi
   delay(10);
   Serial.println();
   lcd.setCursor(0, 0); 
@@ -195,7 +202,7 @@ void setup_wifi() {
 
   unsigned long startAttemptTime = millis();
   
-  // Loop untuk mencoba menghubungkan selama 15 detik (15000 milidetik)
+  // Loop untuk mencoba menghubungkan selama 15 detik (15000 milidetik) jika lebih dari 15 detik tetap tidak terhubung maka alat akan berjalan offline
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 15000) {
     delay(500);
     Serial.print(".");
@@ -216,13 +223,12 @@ void setup_wifi() {
   }
 }
 
-
-
+// Fungsi untuk mencoba menghubungkan ESP32 dengan server MQTT
 boolean reconnect() {
-  if (client.connect("clientId-anggWBWump20")) {
+  if (client.connect("clientId-anggWBWump20")) { // jika id client esp32: "clientId-anggWBWump20" terhubung
     Serial.println("connected");
     return true;
-  } else {
+  } else { // jika tidak terhubung akan mencoba lg dalam 5 detik
     Serial.print("failed, rc=");
     Serial.print(client.state());
     Serial.println(" try again in 5 seconds");
