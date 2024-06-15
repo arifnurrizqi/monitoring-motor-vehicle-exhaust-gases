@@ -129,7 +129,7 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
   long now = millis();
 
   // Periksa apakah kadar gas buang diatas 50 PPM
-  if (co_concentration >= 50.00 || nox_concentration >= 50.00){ // jika iya buzzer akan berbunyi dan memberikan status warning
+  if (co_percentage >= 4.5 || nox_concentration >= 60.00){ // jika iya buzzer akan berbunyi dan memberikan status warning
     digitalWrite(PIN_BUZZER, HIGH);
     status = "Warning";
   } else { // jika tidak buzzer akan mati dan memberikan status safe
@@ -162,6 +162,7 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
       MQ135.setR0(R0_NOx);
       float currentNOx = readAverageSensor(MQ135); // Rata-rata pembacaan
       nox_concentration = smoothValue(currentNOx, nox_concentration, 0.1); // Filter low-pass
+
       isReadingCO = true; // Switch to CO for the next reading
     }
 
