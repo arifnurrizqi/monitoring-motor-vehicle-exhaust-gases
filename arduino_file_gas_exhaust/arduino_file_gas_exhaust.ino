@@ -12,17 +12,18 @@
 #define type               "MQ-135" // Jenis sensor MQ-135
 #define ADC_Bit_Resolution 12       // Jumlah ADC bit ESP32
 #define RatioMQ135CleanAir 3.6      // Rasio untuk udara bersih
+
 #define PIN_MQ135          34       // MQ135 Analog Input Pin
 #define PIN_MQ7            35       // MQ7 Analog Input Pin
 #define PIN_BUZZER         5        // Buzzer Pin
 #define SENSOR_INTERVAL    2000     // Interval 2 detik untuk pembacaan sensor dan pengiriman ke broker
 
-const char* ssid = "ARNUR";
-const char* password = "takonmama";
+const char* ssid = "kecebong_tech";
+const char* password = "qwertyuiop";
 const char* mqtt_server = "broker.hivemq.com";              // Broker mqtt server
 const int   mqtt_tcp_port = 1883;                         // TCP port untuk mqt server
-const char* co_consentration_topic = "ta-anggi-ump20/co";   // Topic mqtt untuk gas CO
-const char* nox_consentration_topic = "ta-anggi-ump20/nox"; // Topic mqtt untuk gas NOx
+const char* co_concentration_topic = "ta-anggi-ump20/co";   // Topic mqtt untuk gas CO
+const char* nox_concentration_topic = "ta-anggi-ump20/nox"; // Topic mqtt untuk gas NOx
 
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 20, 4); // default address 0x27 tipe LCD 16x2 (16,2)
 MQUnifiedsensor MQ135(Board, Voltage_Resolution, ADC_Bit_Resolution, PIN_MQ135, type);
@@ -32,7 +33,7 @@ PubSubClient client(espClient);
 
 // Pendefinisian variabel
 long lastMsg, lastReconnectAttempt, lastSensorRead = 0;
-float nox_consentration, co_consentration;
+float nox_concentration, co_concentration, co_percentage;
 String status;
 
 void setup() {
@@ -59,7 +60,7 @@ void setup() {
 
   MQ135.setRegressionMethod(1); 
   MQ135.setA(110.47); // Constants for NOx
-  MQ135.setB(-4.862); // Constants for NOx
+  MQ135.setB(-2.862); // Constants for NOx
 
   MQ135.init();
 
@@ -95,7 +96,7 @@ void loop() {
   long now = millis();
 
   // Periksa apakah kadar gas buang diatas 50 PPM
-  if (co_consentration >= 50.00 || nox_consentration >= 50.00){
+  if (co_concentration >= 50.00 || nox_concentration >= 50.00){
     digitalWrite(PIN_BUZZER, HIGH);
     status = "Warning";
   } else {
@@ -107,14 +108,20 @@ void loop() {
   if (now - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = now;
     MQ135.update();
-    nox_consentration = MQ135.readSensor();
-    co_consentration = mq7.getPPM();
+    nox_concentration = MQ135.readSensor();
+    co_concentration = mq7.getPPM();
+
+    // Konversi dari konsentrasi ppm ke persentase
+    co_percentage = co_concentration / 10000; // dengan acuan bahwa 1% = 10000 ppm
 
     Serial.print("CO : ");
-    Serial.print(co_consentration);
+    Serial.print(co_concentration);
     Serial.println(" PPM");
+    Serial.print("CO : ");
+    Serial.print(co_percentage);
+    Serial.println(" %");
     Serial.print("NOx Concentration: ");
-    Serial.print(nox_consentration);
+    Serial.print(nox_concentration);
     Serial.println(" PPM");
 
     lcd.clear();
@@ -123,12 +130,12 @@ void loop() {
     lcd.setCursor(0, 1); 
     lcd.print(" CO    : ");
     lcd.setCursor(9, 1); 
-    lcd.print(co_consentration);
-    lcd.print(" ppm");
+    lcd.print(co_percentage);
+    lcd.print(" %");
     lcd.setCursor(0, 2); 
     lcd.print(" NOx   : ");
     lcd.setCursor(9, 2); 
-    lcd.print(nox_consentration);
+    lcd.print(nox_concentration);
     lcd.print(" ppm");
     lcd.setCursor(0, 3); 
     lcd.print("Status : ");
@@ -136,8 +143,8 @@ void loop() {
 
     // Publikasikan ke MQTT
     if (client.connected()) {
-      client.publish(co_consentration_topic, String(co_consentration).c_str());
-      client.publish(nox_consentration_topic, String(nox_consentration).c_str());
+      client.publish(co_concentration_topic, String(co_concentration).c_str());
+      client.publish(nox_concentration_topic, String(nox_concentration).c_str());
     }
   }
 
