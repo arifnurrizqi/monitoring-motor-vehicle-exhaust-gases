@@ -5,7 +5,6 @@
 #include <MQ7.h>               // Library sensor MQ7
 #include <WiFi.h>              // Library WiFi ESP32
 #include <PubSubClient.h>      // Library untuk koneksi mqtt 
-#include <WiFiManager.h>       // Library WiFiManager
 
 #define Board              "ESP-32"
 #define Voltage_Resolution 3.3      // Resolusi tegangan untuk MQ-135
