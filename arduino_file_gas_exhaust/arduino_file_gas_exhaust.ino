@@ -42,7 +42,7 @@ long lastMsg, lastReconnectAttempt, lastSensorRead = 0;
 float R0_NOx, R0_CO;
 String status;
 bool isReadingCO = true; // Flag untuk menentukan gas yang sedang diukur
-float nox_concentration, co_concentration; 
+float nox_concentration, co_concentration, co_percentage; 
 
 void setup() { // Program yang dijalankan sekali saat ESP32 menyala
   Serial.begin(115200);
@@ -149,21 +149,30 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
       MQ135.setA(605.18); // Constants for CO
       MQ135.setB(-3.937); // Constants for CO
       MQ135.setR0(R0_CO);
-      co_concentration = MQ135.readSensor();
+      float currentCO = readAverageSensor(MQ135); // Rata-rata pembacaan
+      co_concentration = smoothValue(currentCO, co_concentration, 0.1); // Filter low-pass
+
+      // Konversi dari konsentrasi ppm ke persentase
+      co_percentage = co_concentration / 10000; // dengan acuan bahwa 1% = 10000 ppm
+
       isReadingCO = false; // Switch to NOx for the next reading
     } else {
       // Memperbaharui nilai Variabel untuk NOx
       MQ135.setA(110.47); // Constants for NOx
       MQ135.setB(-2.862); // Constants for NOx
       MQ135.setR0(R0_NOx);
-      nox_concentration = MQ135.readSensor();
+      float currentNOx = readAverageSensor(MQ135); // Rata-rata pembacaan
+      nox_concentration = smoothValue(currentNOx, nox_concentration, 0.1); // Filter low-pass
       isReadingCO = true; // Switch to CO for the next reading
     }
 
     // menampilkan nilai pembacaan gas pada serial monitor
     Serial.print("CO : ");
     Serial.print(co_concentration);
-    Serial.println(" PPM");
+    Serial.println(" ppm");
+    Serial.print("CO Percent: ");
+    Serial.print(co_percentage);
+    Serial.println(" %");
     Serial.print("NOx Concentration: ");
     Serial.print(nox_concentration);
     Serial.println(" PPM");
@@ -175,8 +184,8 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
     lcd.setCursor(0, 1); 
     lcd.print(" CO    : ");
     lcd.setCursor(9, 1); 
-    lcd.print(co_concentration);
-    lcd.print(" ppm");
+    lcd.print(co_percentage);
+    lcd.print(" %");
     lcd.setCursor(0, 2); 
     lcd.print(" NOx   : ");
     lcd.setCursor(9, 2); 
@@ -207,6 +216,23 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
   }
 
   delay(100);
+}
+
+// Rata-rata dari 10 pembacaan
+float readAverageSensor(MQUnifiedsensor &sensor) {
+  float sum = 0;
+  int readings = 10;
+  for (int i = 0; i < readings; i++) {
+    sensor.update();
+    sum += sensor.readSensor();
+    delay(100); // Delay antara pembacaan untuk stabilitas
+  }
+  return sum / readings;
+}
+
+// Filter low-pass untuk pembacaan sensor
+float smoothValue(float currentValue, float previousValue, float smoothingFactor) {
+  return (smoothingFactor * currentValue) + ((1.0 - smoothingFactor) * previousValue);
 }
 
 void setup_wifi() { // Fungsi untuk melakukan setup koneksi WiFi
