@@ -5,23 +5,20 @@
 #include <MQUnifiedsensor.h>   // Library sensor MQ series
 #include <WiFi.h>              // Library WiFi ESP32
 #include <PubSubClient.h>      // Library untuk koneksi mqtt 
-#include <WiFiManager.h>       // Library WiFiManager
 
 // Sensor Configuration
 #define Board              "ESP-32"
 #define Voltage_Resolution 3.3      // Resolusi tegangan untuk MQ-135
 #define ADC_Bit_Resolution 12       // Jumlah ADC bit ESP32
 #define RatioMQ135CleanAir 3.6      // Rasio untuk udara bersih MQ135
-#define RatioMQ7CleanAir   27.0     // Rasio untuk udara bersih MQ7
 
 // Pin Configuration
 #define PIN_MQ135          34       // MQ135 Analog Input Pin
-#define PIN_MQ7            35       // MQ7 Analog Input Pin
 #define PIN_BUZZER         5        // Buzzer Pin
 
 // WiFi and MQTT Configuration
-const char* ssid = "ARNUR";
-const char* password = "takonmama";
+const char* ssid = "kecebong_tech";
+const char* password = "qwertyuiop";
 const char* mqtt_server = "broker.hivemq.com";              // Broker mqtt server
 const int   mqtt_tcp_port = 1883;                           // TCP port untuk mqt server
 const char* co_concentration_topic = "ta-anggi-ump20/co";   // Topic mqtt untuk gas CO
@@ -32,7 +29,6 @@ LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 20, 4); // default address 0x27 
 
 // MQ Sensor Objects
 MQUnifiedsensor MQ135(Board, Voltage_Resolution, ADC_Bit_Resolution, PIN_MQ135, "MQ-135");
-MQUnifiedsensor MQ7(Board, Voltage_Resolution, ADC_Bit_Resolution, PIN_MQ7, "MQ-7");
 
 // WiFi and MQTT Client
 WiFiClient espClient;
@@ -43,8 +39,10 @@ PubSubClient client(espClient);
 long lastMsg, lastReconnectAttempt, lastSensorRead = 0;
 
 // Pendefinisian variabel lainnya
-float nox_concentration, co_concentration;
+float R0_NOx, R0_CO;
 String status;
+bool isReadingCO = true; // Flag untuk menentukan gas yang sedang diukur
+float nox_concentration, co_concentration; 
 
 void setup() { // Program yang dijalankan sekali saat ESP32 menyala
   Serial.begin(115200);
@@ -69,41 +67,49 @@ void setup() { // Program yang dijalankan sekali saat ESP32 menyala
 
   // Initialize MQ-135 for NOx
   MQ135.setRegressionMethod(1); 
-  MQ135.setA(110.47); // Constants for NOx yang didapat dari library
-  MQ135.setB(-4.862); // Constants for NOx
+  MQ135.setA(110.47); // Constants for NOx
+  MQ135.setB(-2.862); // Constants for NOx
   MQ135.init();
 
-  // Calibrasi Sensor (asumsikan itu berada di udara bersih saat startup)
+  // Calibrasi Sensor untuk NOx (asumsikan itu berada di udara bersih saat startup)
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Exhaust Gas Monitor");
   lcd.setCursor(0, 2);
-  lcd.print("Calibrating process");
-  Serial.print("Calibrating please wait.");
-  float calcR0 = 0;
+  lcd.print("Calibrating NOx");
+  Serial.print("Calibrating NOx, please wait.");
+  float calcR0_NOx = 0;
   for (int i = 1; i <= 10; i++) {
     MQ135.update();
-    calcR0 += MQ135.calibrate(RatioMQ135CleanAir);
+    calcR0_NOx += MQ135.calibrate(RatioMQ135CleanAir);
     lcd.print(".");
     Serial.print(".");
     delay(100);
   }
-  MQ135.setR0(calcR0 / 10);
-  Serial.println("MQ-135 Calibration done!");
+  R0_NOx = calcR0_NOx / 10;
+  Serial.println("MQ-135 NOx Calibration done!");
 
-  // Initialize MQ-7 for CO
-  MQ7.setRegressionMethod(1); 
-  MQ7.setA(99.042); // Constants for CO yang didapat dari library
-  MQ7.setB(-1.518); // Constants for CO
-  MQ7.init();
-  float calcR0_MQ7 = 0;
+  // Initialize MQ-135 for CO
+  MQ135.setA(605.18); // Constants for CO
+  MQ135.setB(-3.937); // Constants for CO
+
+  // Calibrasi Sensor untuk CO (asumsikan itu berada di udara bersih saat startup)
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Exhaust Gas Monitor");
+  lcd.setCursor(0, 2);
+  lcd.print("Calibrating CO");
+  Serial.print("Calibrating CO, please wait.");
+  float calcR0_CO = 0;
   for (int i = 1; i <= 10; i++) {
-    MQ7.update();
-    calcR0_MQ7 += MQ7.calibrate(RatioMQ7CleanAir);
+    MQ135.update();
+    calcR0_CO += MQ135.calibrate(RatioMQ135CleanAir);
+    lcd.print(".");
     Serial.print(".");
+    delay(100);
   }
-  MQ7.setR0(calcR0_MQ7 / 10);
-  Serial.println("MQ-7 Calibration done!");
+  R0_CO = calcR0_CO / 10;
+  Serial.println("MQ-135 CO Calibration done!");
 
   // Menampilkan status kalibrasi sukses pada lcd
   lcd.clear();
@@ -114,6 +120,9 @@ void setup() { // Program yang dijalankan sekali saat ESP32 menyala
   Serial.println("Calibration successful");
   delay(2500);
   lcd.clear();
+
+  // Set initial R0 values
+  MQ135.setR0(isReadingCO ? R0_CO : R0_NOx);
 }
 
 void loop() { // Program yang dijalankan berulang kali setelah selesai menjalankan program pada Void Setup()
@@ -132,13 +141,24 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
   if (now - lastSensorRead >= SENSOR_INTERVAL) {
     lastSensorRead = now; // mengupdate nilai variabel lastSensorRead
 
-    // Update untuk sensor MQ135 dan MQ7
+    // Update untuk sensor MQ135
     MQ135.update();
-    MQ7.update();
 
-    // Memperbaharui nilai Variabel
-    nox_concentration = MQ135.readSensor();
-    co_concentration = MQ7.readSensor();
+    if (isReadingCO) {
+      // Memperbaharui nilai Variabel untuk CO
+      MQ135.setA(605.18); // Constants for CO
+      MQ135.setB(-3.937); // Constants for CO
+      MQ135.setR0(R0_CO);
+      co_concentration = MQ135.readSensor();
+      isReadingCO = false; // Switch to NOx for the next reading
+    } else {
+      // Memperbaharui nilai Variabel untuk NOx
+      MQ135.setA(110.47); // Constants for NOx
+      MQ135.setB(-2.862); // Constants for NOx
+      MQ135.setR0(R0_NOx);
+      nox_concentration = MQ135.readSensor();
+      isReadingCO = true; // Switch to CO for the next reading
+    }
 
     // menampilkan nilai pembacaan gas pada serial monitor
     Serial.print("CO : ");
