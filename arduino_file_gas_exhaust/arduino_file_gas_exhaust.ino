@@ -149,8 +149,7 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
       MQ135.setA(605.18); // Constants for CO
       MQ135.setB(-3.937); // Constants for CO
       MQ135.setR0(R0_CO);
-      float currentCO = readAverageSensor(MQ135); // Rata-rata pembacaan
-      co_concentration = smoothValue(currentCO, co_concentration, 0.1); // Filter low-pass
+      co_concentration = MQ135.readSensor();
 
       // Konversi dari konsentrasi ppm ke persentase
       co_percentage = co_concentration / 10000; // dengan acuan bahwa 1% = 10000 ppm
@@ -161,8 +160,7 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
       MQ135.setA(110.47); // Constants for NOx
       MQ135.setB(-2.862); // Constants for NOx
       MQ135.setR0(R0_NOx);
-      float currentNOx = readAverageSensor(MQ135); // Rata-rata pembacaan
-      nox_concentration = smoothValue(currentNOx, nox_concentration, 0.1); // Filter low-pass
+      nox_concentration = MQ135.readSensor();
       isReadingCO = true; // Switch to CO for the next reading
     }
 
@@ -216,23 +214,6 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
   }
 
   delay(100);
-}
-
-// Rata-rata dari 10 pembacaan
-float readAverageSensor(MQUnifiedsensor &sensor) {
-  float sum = 0;
-  int readings = 10;
-  for (int i = 0; i < readings; i++) {
-    sensor.update();
-    sum += sensor.readSensor();
-    delay(100); // Delay antara pembacaan untuk stabilitas
-  }
-  return sum / readings;
-}
-
-// Filter low-pass untuk pembacaan sensor
-float smoothValue(float currentValue, float previousValue, float smoothingFactor) {
-  return (smoothingFactor * currentValue) + ((1.0 - smoothingFactor) * previousValue);
 }
 
 void setup_wifi() { // Fungsi untuk melakukan setup koneksi WiFi
