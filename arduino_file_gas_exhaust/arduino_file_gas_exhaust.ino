@@ -197,7 +197,7 @@ void loop() { // Program yang dijalankan berulang kali setelah selesai menjalank
 
     // Publikasikan data ke MQTT server: hiveMQ
     if (client.connected()) {
-      client.publish(co_concentration_topic, String(co_concentration).c_str());
+      client.publish(co_concentration_topic, String(co_percentage).c_str());
       client.publish(nox_concentration_topic, String(nox_concentration).c_str());
     }
   }
