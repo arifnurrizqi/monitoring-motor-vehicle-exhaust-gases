@@ -52,7 +52,7 @@
         "height": "4",
         "gtype": "gage",
         "title": "CO Concentration",
-        "label": "ppm",
+        "label": "%",
         "format": "{{value}}",
         "min": 0,
         "max": "100",
