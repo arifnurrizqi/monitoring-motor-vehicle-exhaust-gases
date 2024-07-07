@@ -35,6 +35,12 @@ long lastMsg, lastReconnectAttempt, lastSensorRead = 0;
 float nox_concentration, co_concentration, co_percentage;
 String status;
 
+// Nilai slope dan intercept
+float slope_CO = 0.77;  // Nilai slope untuk CO
+float intercept_CO = 0.14;  // Nilai intercept untuk CO
+float slope_CO2 = 1.64;  // Nilai slope untuk CO2
+float intercept_CO2 = -16.70;  // Nilai intercept untuk CO2
+
 void setup() {
   Serial.begin(115200);
   pinMode(PIN_BUZZER, OUTPUT);
@@ -110,17 +116,22 @@ void loop() {
     nox_concentration = MQ135.readSensor();
     co_concentration = mq7.getPPM();
 
+    // Aplikasi kalibrasi menggunakan slope dan intercept untuk CO
+    float calibrated_CO = (slope_CO * co_concentration) + intercept_CO;
+    // Aplikasi kalibrasi menggunakan slope dan intercept untuk CO2
+    float calibrated_CO2 = (slope_CO2 * nox_concentration) + intercept_CO2;
+
     // Konversi dari konsentrasi ppm ke persentase
-    co_percentage = co_concentration / 10000; // dengan acuan bahwa 1% = 10000 ppm
+    co_percentage = calibrated_CO / 10000; // dengan acuan bahwa 1% = 10000 ppm
 
     Serial.print("CO : ");
-    Serial.print(co_concentration);
+    Serial.print(calibrated_CO);
     Serial.println(" PPM");
     Serial.print("CO : ");
     Serial.print(co_percentage);
     Serial.println(" %");
     Serial.print("NOx Concentration: ");
-    Serial.print(nox_concentration);
+    Serial.print(calibrated_CO2);
     Serial.println(" PPM");
 
     lcd.clear();
@@ -134,7 +145,7 @@ void loop() {
     lcd.setCursor(0, 2); 
     lcd.print(" NOx   : ");
     lcd.setCursor(9, 2); 
-    lcd.print(nox_concentration);
+    lcd.print(calibrated_CO2);
     lcd.print(" ppm");
     lcd.setCursor(0, 3); 
     lcd.print("Status : ");
@@ -142,8 +153,8 @@ void loop() {
 
     // Publikasikan ke MQTT
     if (client.connected()) {
-      client.publish(co_concentration_topic, String(co_concentration).c_str());
-      client.publish(nox_concentration_topic, String(nox_concentration).c_str());
+      client.publish(co_concentration_topic, String(calibrated_CO).c_str());
+      client.publish(nox_concentration_topic, String(calibrated_CO2).c_str());
     }
   }
 
@@ -195,8 +206,6 @@ void setup_wifi() {
     Serial.println("Failed to connect to WiFi within 15 seconds.");
   }
 }
-
-
 
 boolean reconnect() {
   if (client.connect("clientId-anggWBWump20")) {
